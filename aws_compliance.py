@@ -1,5 +1,6 @@
 import argparse
 import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 from utils.compliance_checks import (
     check_iam_mfa_enabled,
     check_iam_least_privilege,
@@ -11,30 +12,45 @@ from utils.compliance_checks import (
 )
 from utils.report_generator import generate_pdf_report, generate_markdown_report
 
-# Function to set up AWS credentials using boto3 Session
-def setup_aws_session():
-    print("AWS credentials not configured. Please enter your AWS credentials.")
-    aws_access_key = input("Enter AWS Access Key ID: ")
-    aws_secret_key = input("Enter AWS Secret Access Key: ")
-    aws_region = input("Enter AWS Region (default: us-east-1): ") or 'us-east-1'
 
-    # Create a boto3 session with the input credentials
-    session = boto3.Session(
-        aws_access_key_id=aws_access_key,
-        aws_secret_access_key=aws_secret_key,
-        region_name=aws_region
-    )
+# Function to set up AWS credentials using boto3 Session if not already configured
+def setup_aws_session():
+    try:
+        # Try to create a session with default credentials
+        session = boto3.Session()
+        sts_client = session.client('sts')
+        # Attempt to call STS to verify credentials
+        sts_client.get_caller_identity()
+        print("AWS credentials found and verified.")
+    except (NoCredentialsError, PartialCredentialsError):
+        print("AWS credentials not found or invalid. Please enter your AWS credentials.")
+        aws_access_key = input("Enter AWS Access Key ID: ")
+        aws_secret_key = input("Enter AWS Secret Access Key: ")
+        aws_region = input("Enter AWS Region (default: us-east-1): ") or 'us-east-1'
+
+        # Create a boto3 session with the input credentials
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=aws_region
+        )
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        exit(1)
     return session
+
 
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(description='AWS Security Documentation Automation Tool')
-    parser.add_argument('-f', '--framework', choices=['cis', 'nist', 'pci'], help='Compliance framework: cis, nist, pci', required=True)
-    parser.add_argument('-o', '--output', choices=['pdf', 'markdown'], help='Output format: pdf or markdown', required=True)
+    parser.add_argument('-f', '--framework', choices=['cis', 'nist', 'pci'],
+                        help='Compliance framework: cis, nist, pci', required=True)
+    parser.add_argument('-o', '--output', choices=['pdf', 'markdown'], help='Output format: pdf or markdown',
+                        required=True)
     args = parser.parse_args()
 
     # Set up AWS session and boto3 clients
-    session = boto3.Session()
+    session = setup_aws_session()
     iam_client = session.client('iam')
     s3_client = session.client('s3')
     ec2_client = session.client('ec2')
@@ -63,6 +79,7 @@ def main():
         generate_pdf_report(results, args.framework)
     elif args.output == 'markdown':
         generate_markdown_report(results, args.framework)
+
 
 if __name__ == "__main__":
     main()
