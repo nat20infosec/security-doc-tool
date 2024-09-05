@@ -18,7 +18,7 @@
             "Action": [
                 "s3:ListAllMyBuckets",
                 "s3:GetBucketAcl",
-                "s3:GetBucketEncryption"
+                "s3:GetEncryptionConfiguration"
             ],
             "Resource": "*"
         },
